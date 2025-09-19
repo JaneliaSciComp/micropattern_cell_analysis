@@ -6,6 +6,51 @@ app = marimo.App(width="medium", app_title="Micropattern Cell Analysis")
 
 @app.cell
 def _():
+    # Configuration
+    # Initial starting path for the file browser (CHANGE ME)
+    initial_path_str = "/groups/vale/valelab/_for_Mark/patterned_data/250521_patterned_plate_1/B06_250528_TRAK1-wt"
+    return (initial_path_str,)
+
+
+@app.cell(hide_code=True)
+def _(Path, initial_path_str, mo):
+    file_browser = mo.ui.file_browser(
+        initial_path=Path(initial_path_str),
+        selection_mode = "file",
+        multiple=False
+    )
+    file_browser
+    return (file_browser,)
+
+
+@app.cell(hide_code=True)
+def _(
+    channel_dropdown,
+    image_scale_slider,
+    imshow_cz,
+    mo,
+    selection,
+    z_slider,
+):
+    def show_viewer():
+        if len(selection) == 0:
+            print("Please select a file")
+            return None
+        else:
+            return mo.vstack([
+                mo.hstack([
+                    imshow_cz(),
+                    image_scale_slider
+                ]),
+                mo.hstack([channel_dropdown,z_slider])
+            ])
+
+    show_viewer()
+    return
+
+
+@app.cell(hide_code=True)
+def _():
     import marimo as mo
     import os
     import pathlib
@@ -18,19 +63,7 @@ def _():
     return Path, mo, nd2, np, plt
 
 
-@app.cell
-def _(Path, mo):
-    path_str = "/groups/scicompsoft/home/kittisopikulm/src/micropattern_cell_analysis/valelab/_for_Mark/patterned_data/"
-    file_browser = mo.ui.file_browser(
-        initial_path=Path(path_str),
-        selection_mode = "file",
-        multiple=True
-    )
-    file_browser
-    return (file_browser,)
-
-
-@app.cell
+@app.cell(hide_code=True)
 def _():
     # do not worry about clustered and dispersed
     # focus on patterned_data
@@ -45,13 +78,13 @@ def _():
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""https://resisted-curiosity-682.notion.site/Final-folder-structure-26879054849480ac8473e5427c072825""")
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
     folder_structure = """
     - no TRAK / TRAK1 / TRAK2 - mito
@@ -99,12 +132,7 @@ def _():
     return
 
 
-@app.cell
-def _():
-    return
-
-
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(
         r"""
@@ -118,20 +146,14 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(file_browser):
     selection = file_browser.value
-    selection[0].name
+    selection
     return (selection,)
 
 
-@app.cell
-def _(selection):
-    selection[0].path
-    return
-
-
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""https://resisted-curiosity-682.notion.site/Micropatterned-cell-analysis-1fc79054849480e887f6d45ba3aeecfb""")
     return
@@ -159,52 +181,15 @@ def _(mo):
     return
 
 
-@app.cell
-def _():
-    data_path = "valelab/Gaby/Vale/imaging/2025/250521_patterned_plate_1"
-    return (data_path,)
-
-
-@app.cell
-def _(Path, data_path):
-    datasets = [str(d) for d in Path(data_path).iterdir() if d.is_dir()]
-    return (datasets,)
-
-
-@app.cell
-def _(datasets, mo):
-    dataset_dropdown = mo.ui.dropdown(options=datasets, label="Select Dataset", value=datasets[0])
-    dataset_dropdown
-    return (dataset_dropdown,)
-
-
-@app.cell
-def _(Path, dataset_dropdown):
-    nd2_images = [str(image) for image in Path(dataset_dropdown.selected_key).iterdir() if image.suffix == ".nd2" and image.name.startswith("Cell")]
-    return (nd2_images,)
-
-
-@app.cell
-def _(mo, nd2_images):
-    images_dropdown = mo.ui.dropdown(options=nd2_images, label = "Select Image", value=nd2_images[0])
-    images_dropdown
-    return (images_dropdown,)
-
-
-@app.cell
-def _(Path, images_dropdown, nd2):
-    image_path = Path(images_dropdown.selected_key)
-    image = nd2.imread(image_path, xarray=True, dask=True)
+@app.cell(hide_code=True)
+def _(nd2, selection):
+    if len(selection) > 0:
+        image_path = selection[0].path
+        image = nd2.imread(image_path, xarray=True, dask=True)
     return (image,)
 
 
-@app.cell
-def _(Path, data_path, nd2):
-    cell_1 = nd2.imread(Path(data_path)/"B06_250528_TRAK1-wt/Cell1.nd2", xarray=True)
-    return
-
-
-@app.cell
+@app.cell(hide_code=True)
 def _(np):
     def scale(arr):
         min = np.min(arr)
@@ -213,48 +198,46 @@ def _(np):
     return (scale,)
 
 
-@app.cell
-def _(image, mo):
-    channel_dropdown = mo.ui.dropdown(
-        options=[str(c) for c in image.C.values],
-        value=image.C.values[0],
-        label="Channel"
-    )
-    channel_dropdown
+@app.cell(hide_code=True)
+def _(image, mo, selection):
+    if len(selection) > 0:
+        channel_dropdown = mo.ui.dropdown(
+            options=[str(c) for c in image.C.values],
+            value=image.C.values[0],
+            label="Channel"
+        )
+        channel_dropdown
     return (channel_dropdown,)
 
 
-@app.cell
-def _(image):
-    image
-    return
-
-
-@app.cell
-def _(image, mo):
-    z_slider = mo.ui.slider(steps=image.Z.values, full_width=True, label="Z")
+@app.cell(hide_code=True)
+def _(image, mo, selection):
+    if len(selection) > 0:
+        z_slider = mo.ui.slider(steps=image.Z.values, full_width=True, label="Z")
     return (z_slider,)
 
 
-@app.cell
-def _(mo):
-    image_scale_slider = mo.ui.range_slider(
-        orientation="vertical",
-        start=0.0,
-        stop=1.0,
-        step=0.01,
-        full_width=True,
-        show_value=True)
+@app.cell(hide_code=True)
+def _(mo, selection):
+    if len(selection) > 0:
+        image_scale_slider = mo.ui.range_slider(
+            orientation="vertical",
+            start=0.0,
+            stop=1.0,
+            step=0.01,
+            full_width=True,
+            show_value=True)
     return (image_scale_slider,)
 
 
-@app.cell
-def _(channel_dropdown, image, z_slider):
-    image_CZ = image.sel(C=channel_dropdown.selected_key, Z=z_slider.value)
+@app.cell(hide_code=True)
+def _(channel_dropdown, image, selection, z_slider):
+    if len(selection) > 0:
+        image_CZ = image.sel(C=channel_dropdown.selected_key, Z=z_slider.value)
     return (image_CZ,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(image_CZ, image_scale_slider, plt, scale):
     def imshow_cz():
         plt.imshow(
@@ -266,47 +249,6 @@ def _(image_CZ, image_scale_slider, plt, scale):
         return plt.gca()
 
     return (imshow_cz,)
-
-
-@app.cell
-def _(
-    channel_dropdown,
-    dataset_dropdown,
-    image_scale_slider,
-    images_dropdown,
-    imshow_cz,
-    mo,
-    z_slider,
-):
-    mo.vstack([
-        dataset_dropdown,
-        images_dropdown,
-        mo.hstack([
-            imshow_cz(),
-            image_scale_slider
-        ]),
-        mo.hstack([channel_dropdown,z_slider])
-    ])
-    return
-
-
-@app.cell
-def _(mean_values, polar_bar):
-    polar_bar(mean_values)
-    return
-
-
-@app.cell
-def _(mean_values, np, plt):
-    plt.plot(np.linspace(0, 360, 37)[0:36], mean_values)
-    return
-
-
-@app.cell
-def _(pattern_mip_scaled, plt, rp):
-    plt.imshow(pattern_mip_scaled, vmax=0.2)
-    plt.scatter(rp[0].centroid[0], rp[0].centroid[1], color='red', marker='x')
-    return
 
 
 if __name__ == "__main__":
