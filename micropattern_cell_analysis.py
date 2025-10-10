@@ -1,7 +1,11 @@
 import marimo
 
 __generated_with = "0.14.15"
-app = marimo.App(width="medium", app_title="Micropattern Cell Analysis")
+app = marimo.App(
+    width="medium",
+    app_title="Micropattern Cell Analysis",
+    layout_file="layouts/micropattern_cell_analysis.slides.json",
+)
 
 
 @app.cell

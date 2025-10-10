@@ -1,7 +1,11 @@
 import marimo
 
 __generated_with = "0.14.15"
-app = marimo.App(width="medium", app_title="Micropattern Cell Analysis")
+app = marimo.App(
+    width="medium",
+    app_title="Micropattern Cell Analysis",
+    layout_file="layouts/micropattern_cell_analysis_viewer.slides.json",
+)
 
 
 @app.cell
@@ -186,7 +190,7 @@ def _(nd2, selection):
     if len(selection) > 0:
         image_path = selection[0].path
         image = nd2.imread(image_path, xarray=True, dask=True)
-    return (image,)
+    return image, image_path
 
 
 @app.cell(hide_code=True)
@@ -249,6 +253,17 @@ def _(image_CZ, image_scale_slider, plt, scale):
         return plt.gca()
 
     return (imshow_cz,)
+
+
+@app.cell
+def _(image_path):
+    image_path
+    return
+
+
+@app.cell
+def _():
+    return
 
 
 if __name__ == "__main__":
