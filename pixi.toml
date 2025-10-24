@@ -8,6 +8,7 @@ version = "0.1.0"
 
 [tasks]
 notebook = "marimo edit --host 0.0.0.0 micropattern_cell_analysis_viewer.py"
+marimo  = "marimo edit --host 0.0.0.0"
 
 [dependencies]
 marimo = ">=0.14.15,<0.15"
