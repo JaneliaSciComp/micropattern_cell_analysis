@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.14.15"
+__generated_with = "0.14.17"
 app = marimo.App(
     width="medium",
     app_title="Micropattern Cell Analysis",
@@ -258,6 +258,12 @@ def _(image_CZ, image_scale_slider, plt, scale):
 @app.cell
 def _(image_path):
     image_path
+    return
+
+
+@app.cell
+def _(image):
+    image.Z
     return
 
 
