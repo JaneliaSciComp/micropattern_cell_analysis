@@ -10,6 +10,9 @@ import pathlib
 import polars as pl
 import sys
 import traceback
+import netCDF4
+from scipy.ndimage import distance_transform_edt
+from matplotlib.backends.backend_pdf import PdfPages
 
 def get_template_at_width(width):
     file = pymupdf.open("single_pattern.ai")
@@ -38,14 +41,35 @@ def get_template_hat(template_width):
     template_hat = np.fft.fft2(template_flipped)
     return template_hat
 
+def get_image_hat(img, offset=[128, 128]):
+    channel_640 = img.sel(C="640")
+    if channel_640.ndim > 3:
+        # If there are two channel 640s, then use the first one
+        # TODO: Make this more specific to the channels
+        channel_640 = channel_640.isel(C=0)
+    img_template_sum_projection = np.sum(img.sel(C="640"), axis=0)
+    assert img_template_sum_projection.ndim == 2
+    img_template_sum_projection_norm = img_template_sum_projection / np.max(img_template_sum_projection)
+    #img_template_sum_projection_hat = np.abs(np.fft.fft2(img_template_sum_projection))
+    img_template_sum_projection_norm_2048 = img_template_sum_projection_norm[offset[0]:2048+offset[0],offset[1]:2048+offset[1]]
+    img_template_sum_projection_norm_2048_hat = np.fft.fft2(img_template_sum_projection_norm_2048)
+    return img_template_sum_projection_norm_2048_hat
+
+"""
 def get_image_hat(img):
-    img_template_sum_projection = np.sum(img.sel(C="640").isel(C=0), axis=0)
+    channel_640 = img.sel(C="640")
+    if channel_640.ndim > 3:
+        # If there are two channel 640s, then use the first one
+        # TODO: Make this more specific to the channels
+        channel_640 = channel_640.isel(C=0)
+    img_template_sum_projection = np.sum(channel_640, axis=0)
     assert img_template_sum_projection.ndim == 2
     img_template_sum_projection_norm = img_template_sum_projection / np.max(img_template_sum_projection)
     #img_template_sum_projection_hat = np.abs(np.fft.fft2(img_template_sum_projection))
     img_template_sum_projection_norm_2048 = img_template_sum_projection_norm[:2048,:2048]
     img_template_sum_projection_norm_2048_hat = np.fft.fft2(img_template_sum_projection_norm_2048)
     return img_template_sum_projection_norm_2048_hat
+"""
 
 def match_template(img, *, template_hat = None):
     if isinstance(img, str) or isinstance(img, pathlib.Path):
@@ -62,28 +86,124 @@ def max_match_template(img, *, template_hat = None):
     max_idx = np.argmax(template_matching)
     return np.unravel_index(max_idx, template_matching.shape)
 
+def stretch01(img, *, min_percentile=0.1, max_percentile=99.9):
+    _min = np.percentile(img, min_percentile)
+    _max = np.percentile(img, max_percentile)
+    return np.clip((img - _min)/(_max - _min), 0, 1)
+
+def make_rgb(R, G, B):
+    RGB = np.zeros([3, *R.shape[-2:]], dtype="float32")
+    if R is not None:
+        RGB[0,:,:] = R
+    if G is not None:
+        RGB[1,:,:] = G
+    if B is not None:
+        RGB[2,:,:] = B
+    return np.permute_dims(RGB,(1,2,0))
 
 def score_template_match(img_path, *, template_hat = None, template = None):
     # Load image
     img = nd2.imread(img_path, xarray=True)
-    sumproj = np.sum(img[:,1,:2048,:2048], axis=0) > 6100
+    sumproj = np.sum(img[:,1,128:2048+128,128:2048+128], axis=0)
+    sumproj_threshold = skimage.filters.threshold_otsu(sumproj.to_numpy())
+    sumproj_thresholded = sumproj > sumproj_threshold
 
     # Match
     max_coords = max_match_template(img, template_hat=template_hat)
     shifted_template = np.roll(template, (max_coords[0] - 1024, max_coords[1] - 1024), axis=(0,1))
-    score = np.sum(sumproj & shifted_template)/(np.sum(shifted_template > 0))
+    shifted_template_contour = skimage.measure.find_contours(shifted_template)
+    score = np.sum(sumproj_thresholded & shifted_template)/(np.sum(shifted_template > 0))
     score = score.values.item()
 
-    # Plot figure
-    fig = plt.figure()
-    plt.imshow(shifted_template)
-    plt.imshow(sumproj, alpha=0.5)
-    plt.scatter(max_coords[1], max_coords[0])
-    plt.annotate(text="{:.3f}%".format(score*100), xy=(max_coords[1] + 100, max_coords[0]), color="yellow")
-    plt.title(img_path, loc="right")
-    pdf_path = pathlib.Path("template_matching",*pathlib.Path(img_path).parts[-3:]).with_suffix(".pdf")
+    cropped_proj_img = np.sum(img[:,:,max_coords[0]-512+128:max_coords[0]+512+128, max_coords[1]-512+128:max_coords[1]+512+128], axis=0)
+    cropped_template_contour = shifted_template_contour[0].copy()
+    cropped_template_contour[:,0] -= (max_coords[0]-512)
+    cropped_template_contour[:,1] -= (max_coords[1]-512)
+
+    cropped_nuc_proj = cropped_proj_img.sel(C="405")
+    nuc_proj_threshold = skimage.filters.threshold_otsu(cropped_nuc_proj.to_numpy())
+    cropped_nuc_mask = cropped_nuc_proj > nuc_proj_threshold
+    cropped_nuc_label = skimage.measure.label(cropped_nuc_mask)
+    cropped_nuc_props = skimage.measure.regionprops(cropped_nuc_label)
+    cropped_nuc_max_area = np.argmax([p.area for p in cropped_nuc_props])
+    cropped_nuc_mask = (cropped_nuc_label == cropped_nuc_max_area+1)
+    cropped_nuc_edt = distance_transform_edt(np.invert(cropped_nuc_mask))
+
+    top_arch_mask = np.zeros_like(cropped_nuc_mask)
+    top_arch_mask[
+        np.round(cropped_template_contour[1083:1951,0]).astype("int"),
+        np.round(cropped_template_contour[1083:1951,1]).astype("int")
+    ] = True
+    cropped_arch_edt = distance_transform_edt(np.invert(top_arch_mask))
+
+    cropped_proj_mitochondria = cropped_proj_img.sel(C="488")
+    cropped_proj_mitochondria_streched = stretch01(cropped_proj_img.sel(C="488"))
+    perinuclear_mitochondria = (cropped_arch_edt > cropped_nuc_edt) * cropped_proj_mitochondria_streched
+    peripheral_mitochondria = (cropped_arch_edt <= cropped_nuc_edt) * cropped_proj_mitochondria_streched
+
+    # Plot figure to PDF
+    relative_path = pathlib.Path(img_path).relative_to("/groups/vale/valelab/_for_Mark/patterned_data")
+    pdf_path = pathlib.Path("template_matching",*relative_path.parts).with_suffix(".pdf")
     pdf_path.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(pdf_path)
+    with PdfPages(pdf_path) as pdf:
+        # Template matching figure
+        fig = plt.figure()
+        #plt.imshow(shifted_template)
+        #plt.imshow(sumproj_thresholded) # , alpha=0.5)
+        plt.imshow(stretch01(sumproj))
+        plt.plot(shifted_template_contour[0][:,1], shifted_template_contour[0][:,0], color="black")
+        plt.scatter(max_coords[1], max_coords[0])
+        plt.annotate(text="{:.3f}%".format(score*100), xy=(max_coords[1] + 100, max_coords[0]), color="yellow")
+        plt.title(img_path, loc="right")
+        pdf.savefig()
+        plt.close()
+
+        fig = plt.figure()
+        cropped_rgb = make_rgb(
+           stretch01(cropped_proj_img.sel(C="488")),
+           None,
+           stretch01(cropped_proj_img.sel(C="405"))
+        )
+        plt.imshow(cropped_rgb)
+        plt.plot(cropped_template_contour[:,1], cropped_template_contour[:,0], color="white")
+        # Top Left point
+        plt.scatter(cropped_template_contour[1083,1], cropped_template_contour[1083,0]+60, color="white")
+        # Top Right point
+        plt.scatter(cropped_template_contour[1951,1], cropped_template_contour[1951,0]+60, color="white")
+        # Bottom Middle point
+        plt.scatter(cropped_template_contour[12,1], cropped_template_contour[12,0], color="white")
+        # Bottom Left point
+        plt.scatter(cropped_template_contour[1083,1], cropped_template_contour[12,0], color="white")
+        # Bottom Right point
+        plt.scatter(cropped_template_contour[1951,1], cropped_template_contour[12,0], color="white")
+        pdf.savefig()
+        plt.close()
+
+        fig = plt.figure()
+        plt.imshow(make_rgb(
+            stretch01(-cropped_arch_edt),
+            stretch01(-cropped_nuc_edt),
+            stretch01(-cropped_arch_edt)
+        ))
+        plt.plot(cropped_template_contour[1083:1951,1],cropped_template_contour[1083:1951,0], color="black")
+        pdf.savefig()
+        plt.close()
+
+        fig = plt.figure()
+        plt.imshow(cropped_arch_edt > cropped_nuc_edt)
+        plt.plot(cropped_template_contour[:,1], cropped_template_contour[:,0], color="white")
+        pdf.savefig()
+        plt.close()
+
+        fig = plt.figure()
+        plt.imshow(make_rgb(
+            peripheral_mitochondria,
+            peripheral_mitochondria,
+            perinuclear_mitochondria
+        ))
+        pdf.savefig()
+        plt.close()
+
 
     return score
 
@@ -99,10 +219,13 @@ def main(root_path):
     for (dirpath, dirnames, filenames) in pathlib.Path(root_path).walk():
         if dirpath.parts[-1] == "MaxIP" or dirpath.parts[-1] == "MaxIPs":
             continue
+        if dirpath.parts[-1] == "Excluded_cells":
+            continue
         img_paths = []
         scores = []
-        csv_path = pathlib.Path("template_matching", *dirpath.parts[-2:], "template_matching.csv")
-        xlsx_path = pathlib.Path("template_matching", *dirpath.parts[-2:], "template_matching.xlsx")
+        relative_path = dirpath.relative_to("/groups/vale/valelab/_for_Mark/patterned_data")
+        csv_path = pathlib.Path("template_matching", *relative_path.parts, "template_matching.csv")
+        xlsx_path = pathlib.Path("template_matching", *relative_path.parts, "template_matching.xlsx")
         print(csv_path)
         print(xlsx_path)
         for filename in filenames:

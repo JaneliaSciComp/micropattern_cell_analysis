@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.14.17"
+__generated_with = "0.17.8"
 app = marimo.App(width="medium")
 
 
@@ -86,9 +86,16 @@ def _(get_template_hat):
 @app.cell
 def _(nd2):
     #img_path = "/groups/vale/valelab/_for_Mark/patterned_data/250521_patterned_plate_1/B06_250528_TRAK1-wt/Cell3.nd2"
-    img_path = "/groups/vale/valelab/_for_Mark/patterned_data/250521_patterned_plate_1/B06_250528_TRAK1-wt/Cell8.nd2"
+    #img_path = "/groups/vale/valelab/_for_Mark/patterned_data/250521_patterned_plate_1/B06_250528_TRAK1-wt/Cell8.nd2"
+    img_path = "/groups/vale/valelab/_for_Mark/patterned_data/250710_patterned_plate_9_good/C02_250718_NoV/cell8.nd2"
     img = nd2.imread(img_path, xarray=True)
     return img, img_path
+
+
+@app.cell
+def _(img):
+    img
+    return
 
 
 @app.cell
@@ -260,7 +267,7 @@ def _(img):
 
 @app.cell
 def _(img):
-    img
+    img.sel(C="640").ndim
     return
 
 
@@ -319,6 +326,59 @@ def _(img_path, pathlib):
 @app.cell
 def _():
     float('nan')
+    return
+
+
+@app.cell
+def _(img):
+    len(img.sel(C="640").dims) > 3
+    return
+
+
+@app.cell
+def _(nd2):
+    img2 = nd2.imread("/groups/vale/valelab/_for_Mark/patterned_data/250521_patterned_plate_1/B06_250529_TRAK1-wt/Cell10.nd2", xarray=True, dask=True)
+    return
+
+
+@app.cell
+def _():
+    return
+
+
+@app.cell
+def _(nd2, pathlib):
+    def shit_data_scan():
+        root_path = "/groups/vale/valelab/_for_Mark/patterned_data"
+        for (dirpath, dirnames, filenames) in pathlib.Path(root_path).walk():
+            relative_path = dirpath.relative_to(root_path)
+            relative_depth = len(relative_path.parts)
+            if relative_depth != 2:
+                #print(f"Ignoring {dirpath=}")
+                continue
+            for filename in filenames:
+                 if filename.endswith(".nd2") and (filename.startswith("Cell") or filename.startswith("cell")):
+                    img = nd2.imread(
+                        pathlib.Path(dirpath) / filename,
+                        xarray=True,
+                        dask=True
+                    )
+                    try:
+                        if len(img.sel(C="640").dims) > 3:
+                            print(pathlib.Path(dirpath) / filename)
+                    except Exception as e:
+                        print(f"Error: {e}")
+                        print(pathlib.Path(dirpath) / filename)
+        print("Scan complete!")
+
+    shit_data_scan()
+    return
+
+
+@app.cell
+def _(nd2):
+    img3 = nd2.imread("/groups/vale/valelab/_for_Mark/patterned_data/250626_patterned_plate_7/C09_250630_ctrl_siRNA/Cell6_DIC.nd2", xarray=True, dask=True)
+    img3
     return
 
 

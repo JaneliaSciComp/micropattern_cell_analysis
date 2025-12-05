@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.14.15"
+__generated_with = "0.17.8"
 app = marimo.App(width="medium", app_title="Micropattern Cell Analysis")
 
 
@@ -20,14 +20,15 @@ def _():
 
 @app.cell
 def _(mo):
-    mo.md(r"""https://resisted-curiosity-682.notion.site/Micropatterned-cell-analysis-1fc79054849480e887f6d45ba3aeecfb""")
+    mo.md(r"""
+    https://resisted-curiosity-682.notion.site/Micropatterned-cell-analysis-1fc79054849480e887f6d45ba3aeecfb
+    """)
     return
 
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md(
-        r"""
+    mo.md(r"""
     1. File structure:
         - parent folder corresponds to a 96 well plate that was plated and fixed on the same day
             - \\[prfs.hhmi.org](http://prfs.hhmi.org/)\valelab\\Gaby\Vale\imaging\2025\250521_round_E_patterned_1
@@ -41,14 +42,13 @@ def _(mo):
         561 - expressed TRAK protein that is expected to affect distribution
         640 - micro pattern visualised by Fibronectin-647
         - we might consider processing by denoising using NIS Elements; this could be very effective to boost our signal:noise ratio
-    """
-    )
+    """)
     return
 
 
 @app.cell
 def _():
-    data_path = "valelab/Gaby/Vale/imaging/2025/250521_round_E_patterned_1"
+    data_path = "valelab/Gaby/Vale/imaging/2025/250521_patterned_plate_1"
     return (data_path,)
 
 
@@ -83,6 +83,12 @@ def _(Path, images_dropdown, nd2):
     image_path = Path(images_dropdown.selected_key)
     image = nd2.imread(image_path, xarray=True, dask=True)
     return (image,)
+
+
+@app.cell
+def _(image):
+    image.dims
+    return
 
 
 @app.cell
@@ -151,7 +157,6 @@ def _(centroid, image_CZ, image_scale_slider, plt, scale):
         )
         plt.scatter(centroid[0], centroid[1], color='red', marker='x')
         return plt.gca()
-
     return (imshow_cz,)
 
 
@@ -612,7 +617,7 @@ def _(
         max_pattern_area = max(pattern_areas)
         arg_max_pattern_area = np.argmax(np.array(pattern_areas))
         pattern_binary = pattern_mip_scaled_dilated_label == pattern_rp[arg_max_pattern_area].label
-    
+
         pattern_centroid = pattern_rp[arg_max_pattern_area].centroid
 
         XY = xr.broadcast(image.Y,image.X)
@@ -656,7 +661,6 @@ def _(
             "pattern_centroid": pattern_centroid,
             "image_C_sum": image_C_sum
         }
-
     return (analyze_cell,)
 
 

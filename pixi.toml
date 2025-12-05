@@ -11,7 +11,7 @@ notebook = "marimo edit --host 0.0.0.0 micropattern_cell_analysis_viewer.py"
 marimo  = "marimo edit --host 0.0.0.0"
 
 [dependencies]
-marimo = ">=0.14.15,<0.15"
+marimo = ">=0.17.8,<0.18"
 nd2 = ">=0.10.3,<0.11"
 dask = ">=2025.7.0,<2026"
 xarray = ">=2025.7.1,<2026"
@@ -25,6 +25,8 @@ pillow = ">=11.3.0,<12"
 pycairo = ">=1.28.0,<2"
 polars = ">=1.35.1,<2"
 xlsxwriter = ">=3.2.9,<4"
+netcdf4 = ">=1.7.3,<2"
+h5py = ">=3.15.1,<4"
 
 [pypi-dependencies]
 pymupdf = ">=1.26.4, <2"

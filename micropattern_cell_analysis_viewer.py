@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.14.17"
+__generated_with = "0.17.8"
 app = marimo.App(
     width="medium",
     app_title="Micropattern Cell Analysis",
@@ -12,7 +12,7 @@ app = marimo.App(
 def _():
     # Configuration
     # Initial starting path for the file browser (CHANGE ME)
-    initial_path_str = "/groups/vale/valelab/_for_Mark/patterned_data/250521_patterned_plate_1/B06_250528_TRAK1-wt"
+    initial_path_str = "/groups/vale/valelab/_for_Mark/patterned_data/250521_patterned_plate_1/B06_TRAK1_wt_combined/"
     return (initial_path_str,)
 
 
@@ -84,7 +84,9 @@ def _():
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md(r"""https://resisted-curiosity-682.notion.site/Final-folder-structure-26879054849480ac8473e5427c072825""")
+    mo.md(r"""
+    https://resisted-curiosity-682.notion.site/Final-folder-structure-26879054849480ac8473e5427c072825
+    """)
     return
 
 
@@ -138,15 +140,13 @@ def _():
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md(
-        r"""
+    mo.md(r"""
     * Metric between clustered and dispersed mitochondira
     * Get probability density distribution between the two
     * Sum across the intensities
     * 60mers do not have a triplicate
     * Just extract the density map
-    """
-    )
+    """)
     return
 
 
@@ -159,14 +159,15 @@ def _(file_browser):
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md(r"""https://resisted-curiosity-682.notion.site/Micropatterned-cell-analysis-1fc79054849480e887f6d45ba3aeecfb""")
+    mo.md(r"""
+    https://resisted-curiosity-682.notion.site/Micropatterned-cell-analysis-1fc79054849480e887f6d45ba3aeecfb
+    """)
     return
 
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md(
-        r"""
+    mo.md(r"""
     1. File structure:
         - parent folder corresponds to a 96 well plate that was plated and fixed on the same day
             - \\[prfs.hhmi.org](http://prfs.hhmi.org/)\valelab\\Gaby\Vale\imaging\2025\250521_round_E_patterned_1
@@ -180,8 +181,7 @@ def _(mo):
         561 - expressed TRAK protein that is expected to affect distribution
         640 - micro pattern visualised by Fibronectin-647
         - we might consider processing by denoising using NIS Elements; this could be very effective to boost our signal:noise ratio
-    """
-    )
+    """)
     return
 
 
@@ -251,7 +251,6 @@ def _(image_CZ, image_scale_slider, plt, scale):
         )
         #plt.scatter(centroid[0], centroid[1], color='red', marker='x')
         return plt.gca()
-
     return (imshow_cz,)
 
 
