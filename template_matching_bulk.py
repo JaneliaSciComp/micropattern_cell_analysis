@@ -101,6 +101,10 @@ def make_rgb(R, G, B):
         RGB[2,:,:] = B
     return np.permute_dims(RGB,(1,2,0))
 
+def draw_scale_bar(pixel_length):
+    plt.plot([800, 800+pixel_length], [900, 900], color="white")
+    plt.text(790, 950, "5 μm", color="white")
+
 def score_template_match(img_path, *, template_hat = None, template = None):
     # Load image
     img = nd2.imread(img_path, xarray=True)
@@ -136,10 +140,32 @@ def score_template_match(img_path, *, template_hat = None, template = None):
     ] = True
     cropped_arch_edt = distance_transform_edt(np.invert(top_arch_mask))
 
+    metadata = img.metadata["metadata"]
+    lateral_pixel_pitch = metadata.channels[0].volume.axesCalibration[0]
+    perinuclear_space_distance_um = 5 # micrometers
+    perinuclear_space_distance_pixels = perinuclear_space_distance_um/lateral_pixel_pitch
+
     cropped_proj_mitochondria = cropped_proj_img.sel(C="488")
     cropped_proj_mitochondria_streched = stretch01(cropped_proj_img.sel(C="488"))
-    perinuclear_mitochondria = (cropped_arch_edt > cropped_nuc_edt) * cropped_proj_mitochondria_streched
-    peripheral_mitochondria = (cropped_arch_edt <= cropped_nuc_edt) * cropped_proj_mitochondria_streched
+    perinuclear_mask = cropped_nuc_edt < perinuclear_space_distance_pixels
+    peripheral_mask = cropped_arch_edt <= cropped_nuc_edt
+    peripheral_mask &= np.invert(perinuclear_mask)
+    peripheral_mask_5um  = (cropped_arch_edt <= perinuclear_space_distance_pixels) & peripheral_mask
+    peripheral_mask     &=  cropped_arch_edt <= perinuclear_space_distance_pixels * 1.75
+    perinuclear_mitochondria = perinuclear_mask * cropped_proj_mitochondria_streched
+    peripheral_mitochondria  = peripheral_mask  * cropped_proj_mitochondria_streched
+
+    peripheral_contour = skimage.measure.find_contours(peripheral_mask)[0]
+    peripheral_5um_contour = skimage.measure.find_contours(peripheral_mask_5um)[0]
+    perinuclear_contour = skimage.measure.find_contours(perinuclear_mask)[0]
+
+    perinuclear_sum = np.sum(perinuclear_mitochondria)
+    peripheral_sum = np.sum(peripheral_mitochondria)
+    total_sum = perinuclear_sum + peripheral_sum
+    peripheral_percent = peripheral_sum / total_sum * 100
+
+    # draw contour around 0.5 um of nucleus
+    cropped_nuclear_contour = get_nuclear_contour(cropped_nuc_edt < 0.5/lateral_pixel_pitch)
 
     # Plot figure to PDF
     relative_path = pathlib.Path(img_path).relative_to("/groups/vale/valelab/_for_Mark/patterned_data")
@@ -166,6 +192,8 @@ def score_template_match(img_path, *, template_hat = None, template = None):
         )
         plt.imshow(cropped_rgb)
         plt.plot(cropped_template_contour[:,1], cropped_template_contour[:,0], color="white")
+        # Top Arch
+        plt.plot(cropped_template_contour[1083:1951,1], cropped_template_contour[1083:1951,0], color="magenta")
         # Top Left point
         plt.scatter(cropped_template_contour[1083,1], cropped_template_contour[1083,0]+60, color="white")
         # Top Right point
@@ -176,6 +204,7 @@ def score_template_match(img_path, *, template_hat = None, template = None):
         plt.scatter(cropped_template_contour[1083,1], cropped_template_contour[12,0], color="white")
         # Bottom Right point
         plt.scatter(cropped_template_contour[1951,1], cropped_template_contour[12,0], color="white")
+        draw_scale_bar(perinuclear_space_distance_pixels)
         pdf.savefig()
         plt.close()
 
@@ -186,29 +215,59 @@ def score_template_match(img_path, *, template_hat = None, template = None):
             stretch01(-cropped_arch_edt)
         ))
         plt.plot(cropped_template_contour[1083:1951,1],cropped_template_contour[1083:1951,0], color="black")
+        draw_scale_bar(perinuclear_space_distance_pixels)
         pdf.savefig()
         plt.close()
 
         fig = plt.figure()
-        plt.imshow(cropped_arch_edt > cropped_nuc_edt)
+        plt.imshow(cropped_arch_edt <= cropped_nuc_edt)
         plt.plot(cropped_template_contour[:,1], cropped_template_contour[:,0], color="white")
+        plt.plot(cropped_template_contour[1083:1951,1],cropped_template_contour[1083:1951,0], color="magenta", alpha=0.5)
+        plt.plot(cropped_nuclear_contour[:,1], cropped_nuclear_contour[:,0], color="blue", alpha=0.5)
+        draw_scale_bar(perinuclear_space_distance_pixels)
         pdf.savefig()
         plt.close()
 
         fig = plt.figure()
+        plt.imshow(cropped_rgb)
+        plt.plot(peripheral_contour[:,1],  peripheral_contour[:,0], color="yellow")
+        plt.plot(peripheral_5um_contour[:,1],  peripheral_5um_contour[:,0], color="yellow")
+        plt.plot(cropped_template_contour[1083:1951,1],cropped_template_contour[1083:1951,0], color="magenta", alpha=0.5)
+        plt.plot(perinuclear_contour[:,1], perinuclear_contour[:,0], color="blue")
+        pdf.savefig()
+        plt.close()
+
+        fig = plt.figure()
+        # Draw periperhal mitochondria as yellow
         plt.imshow(make_rgb(
             peripheral_mitochondria,
             peripheral_mitochondria,
             perinuclear_mitochondria
         ))
+        plt.plot(cropped_template_contour[1083:1951,1],cropped_template_contour[1083:1951,0], color="white", alpha=0.5)
+        plt.plot(cropped_nuclear_contour[:,1], cropped_nuclear_contour[:,0], color="white", alpha=0.5)
+        plt.title("{:.3f}%".format(peripheral_percent))
+        draw_scale_bar(perinuclear_space_distance_pixels)
         pdf.savefig()
         plt.close()
 
+    output = {
+            "score": score,
+            "perinuclear_sum": perinuclear_sum,
+            "peripheral_sum": peripheral_sum,
+            "peripheral_percent": peripheral_percent
+    }
 
-    return score
+    return output
 
+def get_nuclear_contour(nuclear_mask):
+    nuclear_contours = skimage.measure.find_contours(nuclear_mask)
+    nuclear_contour_index = np.argmax([len(contour) for contour in nuclear_contours])
+    return nuclear_contours[nuclear_contour_index]
 
 def main(root_path):
+    pl.Config.set_tbl_cell_alignment("RIGHT")
+
     #Set up template
     template_hat = get_template_hat(1326)
     template = get_padded_template_at_width(1326)
@@ -223,6 +282,7 @@ def main(root_path):
             continue
         img_paths = []
         scores = []
+        peripheral_percent = []
         relative_path = dirpath.relative_to("/groups/vale/valelab/_for_Mark/patterned_data")
         csv_path = pathlib.Path("template_matching", *relative_path.parts, "template_matching.csv")
         xlsx_path = pathlib.Path("template_matching", *relative_path.parts, "template_matching.xlsx")
@@ -234,11 +294,13 @@ def main(root_path):
                 img_paths.append(img_path)
                 try:
                     print(img_path)
-                    score = score_template_match(img_path, template_hat=template_hat, template=template)
-                    print(score)
-                    scores.append(score)
+                    output = score_template_match(img_path, template_hat=template_hat, template=template)
+                    print(output["score"])
+                    scores.append(output["score"])
+                    peripheral_percent.append(output["peripheral_percent"])
                 except Exception as e:
                     scores.append(float('nan'))
+                    peripheral_percent.append(float('nan'))
                     print(f"An error occurred with {img_path}: {e}")
                     traceback.print_exc()
 
@@ -249,11 +311,13 @@ def main(root_path):
         score_df = pl.DataFrame(
                 {
                     "path": [str(img_path) for img_path in img_paths],
-                    "template_matching_score": scores
+                    "template_matching_score": scores,
+                    "peripheral_percent": peripheral_percent
                 },
                 {
                     "path": pl.datatypes.String,
-                    "template_matching_score": pl.datatypes.Float64
+                    "template_matching_score": pl.datatypes.Float64,
+                    "peripheral_percent": pl.datatypes.Float64
                 }
         )
         print(score_df)
