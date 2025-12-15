@@ -145,15 +145,20 @@ def score_template_match(img_path, *, template_hat = None, template = None):
     offset = offset_overrides.get(str(img_path), [128, 128])
     roi = roi_overrides.get(str(img_path), None)
     print(f"{img_path = }")
-    print(f"{offset = }")
-    print(f"{roi = }")
+    #print(f"{offset = }")
+    #print(f"{roi = }")
     max_coords = max_match_template(img, template_hat=template_hat, offset=offset, roi=roi)
     shifted_template = np.roll(template, (max_coords[0] - 1024, max_coords[1] - 1024), axis=(0,1))
     shifted_template_contour = skimage.measure.find_contours(shifted_template)
     score = np.sum(sumproj_thresholded & shifted_template)/(np.sum(shifted_template > 0))
     score = score.values.item()
 
+    relative_path = pathlib.Path(img_path).relative_to("/groups/vale/valelab/_for_Mark/patterned_data")
+    proj_path = pathlib.Path("projections",*relative_path.parts).with_suffix(".nc")
+    proj_path.parent.mkdir(parents=True, exist_ok=True)
+
     cropped_proj_img = np.sum(img[:,:,max_coords[0]-512+128:max_coords[0]+512+128, max_coords[1]-512+128:max_coords[1]+512+128], axis=0)
+    cropped_proj_img.to_netcdf(proj_path)
     cropped_template_contour = shifted_template_contour[0].copy()
     cropped_template_contour[:,0] -= (max_coords[0]-512)
     cropped_template_contour[:,1] -= (max_coords[1]-512)
@@ -234,7 +239,8 @@ def score_template_match(img_path, *, template_hat = None, template = None):
     cropped_nuclear_contour = get_nuclear_contour(cropped_nuc_edt < 0.5/lateral_pixel_pitch)
 
     # Plot figure to PDF
-    relative_path = pathlib.Path(img_path).relative_to("/groups/vale/valelab/_for_Mark/patterned_data")
+    # moved up
+    # relative_path = pathlib.Path(img_path).relative_to("/groups/vale/valelab/_for_Mark/patterned_data")
     pdf_path = pathlib.Path("template_matching",*relative_path.parts).with_suffix(".pdf")
     pdf_path.parent.mkdir(parents=True, exist_ok=True)
     with PdfPages(pdf_path) as pdf:
