@@ -296,9 +296,9 @@ def score_template_match(img_path, *, template_hat = None, template = None):
 
         fig = plt.figure()
         plt.imshow(cropped_rgb)
-        plt.plot(peripheral_contour[:,1],  peripheral_contour[:,0], color="yellow")
+        plt.plot(peripheral_contour[:,1],  peripheral_contour[:,0], color="yellow", linestyle="dotted")
         plt.plot(peripheral_5um_contour[:,1],  peripheral_5um_contour[:,0], color="yellow")
-        plt.plot(acute_peripheral_contour[:,1],  acute_peripheral_contour[:,0], color="yellow")
+        plt.plot(acute_peripheral_contour[:,1],  acute_peripheral_contour[:,0], color="yellow", linestyle="dotted")
         plt.plot(cropped_template_contour[1083:1951,1],cropped_template_contour[1083:1951,0], color="magenta", alpha=0.5)
         plt.plot(cropped_template_contour[1300:1734,1],cropped_template_contour[1300:1734,0], color="cyan", alpha=0.5)
         plt.plot(perinuclear_contour[:,1], perinuclear_contour[:,0], color="blue")
@@ -306,16 +306,16 @@ def score_template_match(img_path, *, template_hat = None, template = None):
         plt.close()
 
         fig = plt.figure()
-        # Draw periperhal mitochondria as yellow
+        # Draw peripheral mitochondria as yellow
         plt.imshow(make_rgb(
-            peripheral_mitochondria,
-            peripheral_mitochondria,
+            peripheral_5um_mitochondria,
+            peripheral_5um_mitochondria,
             perinuclear_mitochondria
         ))
         plt.plot(cropped_template_contour[1083:1951,1],cropped_template_contour[1083:1951,0], color="white", alpha=0.5)
         plt.plot(cropped_template_contour[1300:1734,1],cropped_template_contour[1300:1734,0], color="cyan", alpha=0.5)
         plt.plot(cropped_nuclear_contour[:,1], cropped_nuclear_contour[:,0], color="white", alpha=0.5)
-        plt.title("{:.3f}%".format(peripheral_percent))
+        plt.title("P5um/(P5um+N): {:.1f}%, P5um/Crop: {:.1f}%, N/Crop: {:.1f}%".format(peripheral_5um_percent, peripheral_5um_sum/mitochondria_sum*100, perinuclear_sum/mitochondria_sum*100))
         draw_scale_bar(perinuclear_space_distance_pixels)
         pdf.savefig()
         plt.close()
@@ -403,24 +403,28 @@ def main(root_path):
                 {
                     "path": [str(img_path) for img_path in img_paths],
                     "template_matching_score": scores,
-                    "peripheral_percent": peripheral_percent,
+                    #"peripheral_percent": peripheral_percent,
                     "peripheral_5um_percent": peripheral_5um_percent,
-                    "acute_peripheral_percent": acute_peripheral_percent,
+                    #"acute_peripheral_percent": acute_peripheral_percent,
                     "mitochondria_sum": mitochondria_sum,
-                    "peripheral_sum": peripheral_sum,
+                    #"peripheral_sum": peripheral_sum,
                     "peripheral_5um_sum": peripheral_5um_sum,
-                    "perinuclear_sum": perinuclear_sum
+                    "perinuclear_sum": perinuclear_sum,
+                    "peripheral_5um_percent_total": np.array(peripheral_5um_sum) / np.array(mitochondria_sum) * 100,
+                    "perinuclear_percent_total": np.array(perinuclear_sum) / np.array(mitochondria_sum) * 100
                 },
                 {
                     "path": pl.datatypes.String,
                     "template_matching_score": pl.datatypes.Float64,
-                    "peripheral_percent": pl.datatypes.Float64,
+                    #"peripheral_percent": pl.datatypes.Float64,
                     "peripheral_5um_percent": pl.datatypes.Float64,
-                    "acute_peripheral_percent": pl.datatypes.Float64,
+                    #"acute_peripheral_percent": pl.datatypes.Float64,
                     "mitochondria_sum": pl.datatypes.Float64,
-                    "peripheral_sum": pl.datatypes.Float64,
+                    #"peripheral_sum": pl.datatypes.Float64,
                     "peripheral_5um_sum": pl.datatypes.Float64,
-                    "perinuclear_sum": pl.datatypes.Float64
+                    "perinuclear_sum": pl.datatypes.Float64,
+                    "peripheral_5um_percent_total": pl.datatypes.Float64,
+                    "perinuclear_percent_total": pl.datatypes.Float64
                 }
         )
         csv_path.parent.mkdir(parents=True, exist_ok=True)
