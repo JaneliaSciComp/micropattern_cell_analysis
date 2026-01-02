@@ -52,7 +52,7 @@ offset_overrides = {
     "/groups/vale/valelab/_for_Mark/patterned_data/250612_patterned_plate_3/B06_250617_TRAK1_mDRH_dSp/Cell12.nd2": [64,128]
 }
 
-def get_image_hat(img, offset=[128, 128]):
+def get_img_template_sum_projection(img):
     channel_640 = img.sel(C="640")
     if channel_640.ndim > 3:
         # If there are two channel 640s, then use the first one
@@ -60,6 +60,11 @@ def get_image_hat(img, offset=[128, 128]):
         channel_640 = channel_640.isel(C=0)
     img_template_sum_projection = np.sum(img.sel(C="640"), axis=0)
     assert img_template_sum_projection.ndim == 2
+    return img_template_sum_projection
+
+
+def get_image_hat(img, offset=[128, 128]):
+    img_template_sum_projection = get_img_template_sum_projection(img)
     img_template_sum_projection_norm = img_template_sum_projection / np.max(img_template_sum_projection)
     #img_template_sum_projection_hat = np.abs(np.fft.fft2(img_template_sum_projection))
     img_template_sum_projection_norm_2048 = img_template_sum_projection_norm[offset[0]:2048+offset[0],offset[1]:2048+offset[1]]
@@ -137,16 +142,20 @@ def draw_scale_bar(pixel_length):
 def score_template_match(img_path, *, template_hat = None, template = None):
     # Load image
     img = nd2.imread(img_path, xarray=True)
-    sumproj = np.sum(img[:,1,128:2048+128,128:2048+128], axis=0)
-    sumproj_threshold = skimage.filters.threshold_otsu(sumproj.to_numpy())
-    sumproj_thresholded = sumproj > sumproj_threshold
 
-    # Match
+    # Get offset and ROI overrides
     offset = offset_overrides.get(str(img_path), [128, 128])
     roi = roi_overrides.get(str(img_path), None)
     print(f"{img_path = }")
     #print(f"{offset = }")
     #print(f"{roi = }")
+
+    # Get channel 640, resolving duplicates
+    sumproj = get_img_template_sum_projection(img)[offset[0]:2048+offset[0], offset[1]:2048+offset[1]]
+    sumproj_threshold = skimage.filters.threshold_otsu(sumproj.to_numpy())
+    sumproj_thresholded = sumproj > sumproj_threshold
+ 
+    # Match
     max_coords = max_match_template(img, template_hat=template_hat, offset=offset, roi=roi)
     shifted_template = np.roll(template, (max_coords[0] - 1024, max_coords[1] - 1024), axis=(0,1))
     shifted_template_contour = skimage.measure.find_contours(shifted_template)
@@ -206,6 +215,8 @@ def score_template_match(img_path, *, template_hat = None, template = None):
     peripheral_mask &= np.invert(perinuclear_mask)
     peripheral_5um_mask  = (cropped_arch_edt <= perinuclear_space_distance_pixels) & peripheral_mask
     peripheral_mask     &=  cropped_arch_edt <= perinuclear_space_distance_pixels * 1.75
+    # Simple does peripheral mask does not depend on the nucleus position
+    peripheral_5um_simple_mask = cropped_arch_edt <= perinuclear_space_distance_pixels
 
     acute_peripheral_mask = cropped_acute_arch_edt <= cropped_nuc_edt
     acute_peripheral_mask &= np.invert(perinuclear_mask)
@@ -216,6 +227,7 @@ def score_template_match(img_path, *, template_hat = None, template = None):
     perinuclear_mitochondria = perinuclear_mask * cropped_proj_mitochondria_bg_subtracted
     peripheral_mitochondria  = peripheral_mask  * cropped_proj_mitochondria_bg_subtracted
     peripheral_5um_mitochondria = peripheral_5um_mask * cropped_proj_mitochondria_bg_subtracted
+    peripheral_5um_simple_mitochondria = peripheral_5um_simple_mask * cropped_proj_mitochondria_bg_subtracted
     acute_peripheral_mitochondria = acute_peripheral_mask * cropped_proj_mitochondria_bg_subtracted
 
     peripheral_contour = skimage.measure.find_contours(peripheral_mask)[0]
@@ -227,11 +239,13 @@ def score_template_match(img_path, *, template_hat = None, template = None):
 
     peripheral_sum = np.sum(peripheral_mitochondria)
     peripheral_5um_sum = np.sum(peripheral_5um_mitochondria)
+    peripheral_5um_simple_sum = np.sum(peripheral_5um_simple_mitochondria)
     acute_peripheral_sum = np.sum(acute_peripheral_mitochondria)
 
     pp_sum = perinuclear_sum + peripheral_sum
     peripheral_percent = peripheral_sum / pp_sum * 100
     peripheral_5um_percent = peripheral_5um_sum / (peripheral_5um_sum + perinuclear_sum) * 100
+    peripheral_5um_simple_percent = peripheral_5um_simple_sum / (peripheral_5um_simple_sum + perinuclear_sum) * 100
     acute_peripheral_percent = acute_peripheral_sum / (acute_peripheral_sum + perinuclear_sum) * 100
 
 
@@ -331,9 +345,11 @@ def score_template_match(img_path, *, template_hat = None, template = None):
             "perinuclear_sum": perinuclear_sum,
             "peripheral_sum": peripheral_sum,
             "peripheral_5um_sum": peripheral_5um_sum,
+            "peripheral_5um_simple_sum": peripheral_5um_simple_sum,
             "mitochondria_sum": mitochondria_sum,
             "peripheral_percent": peripheral_percent,
             "peripheral_5um_percent": peripheral_5um_percent,
+            "peripheral_5um_simple_percent": peripheral_5um_simple_percent,
             "acute_peripheral_percent": acute_peripheral_percent,
     }
 
@@ -368,6 +384,7 @@ def main(root_path):
         peripheral_sum = []
         perinuclear_sum = []
         peripheral_5um_sum = []
+        peripheral_5um_simple_sum = []
         relative_path = dirpath.relative_to("/groups/vale/valelab/_for_Mark/patterned_data")
         csv_path = pathlib.Path("template_matching", *relative_path.parts, "template_matching.csv")
         xlsx_path = pathlib.Path("template_matching", *relative_path.parts, "template_matching.xlsx")
@@ -388,6 +405,7 @@ def main(root_path):
                     mitochondria_sum.append(output["mitochondria_sum"])
                     peripheral_sum.append(output["peripheral_sum"])
                     peripheral_5um_sum.append(output["peripheral_5um_sum"])
+                    peripheral_5um_simple_sum.append(output["peripheral_5um_simple_sum"])
                     perinuclear_sum.append(output["perinuclear_sum"])
                 except Exception as e:
                     scores.append(float('nan'))
@@ -397,6 +415,7 @@ def main(root_path):
                     mitochondria_sum.append(float('nan'))
                     peripheral_sum.append(float('nan'))
                     peripheral_5um_sum.append(float('nan'))
+                    peripheral_5um_simple_sum.append(float('nan'))
                     perinuclear_sum.append(float('nan'))
                     print(f"An error occurred with {img_path}: {e}")
                     traceback.print_exc()
@@ -410,26 +429,30 @@ def main(root_path):
                     "path": [str(img_path) for img_path in img_paths],
                     "template_matching_score": scores,
                     #"peripheral_percent": peripheral_percent,
-                    "peripheral_5um_percent": peripheral_5um_percent,
+                    #"peripheral_5um_percent": peripheral_5um_percent,
                     #"acute_peripheral_percent": acute_peripheral_percent,
                     "mitochondria_sum": mitochondria_sum,
                     #"peripheral_sum": peripheral_sum,
                     "peripheral_5um_sum": peripheral_5um_sum,
+                    "peripheral_5um_simple_sum": peripheral_5um_simple_sum,
                     "perinuclear_sum": perinuclear_sum,
                     "peripheral_5um_percent_total": np.array(peripheral_5um_sum) / np.array(mitochondria_sum) * 100,
+                    "peripheral_5um_simple_percent_total": np.array(peripheral_5um_simple_sum) / np.array(mitochondria_sum) * 100,
                     "perinuclear_percent_total": np.array(perinuclear_sum) / np.array(mitochondria_sum) * 100
                 },
                 {
                     "path": pl.datatypes.String,
                     "template_matching_score": pl.datatypes.Float64,
                     #"peripheral_percent": pl.datatypes.Float64,
-                    "peripheral_5um_percent": pl.datatypes.Float64,
+                    #"peripheral_5um_percent": pl.datatypes.Float64,
                     #"acute_peripheral_percent": pl.datatypes.Float64,
                     "mitochondria_sum": pl.datatypes.Float64,
                     #"peripheral_sum": pl.datatypes.Float64,
                     "peripheral_5um_sum": pl.datatypes.Float64,
+                    "peripheral_5um_simple_sum": pl.datatypes.Float64,
                     "perinuclear_sum": pl.datatypes.Float64,
                     "peripheral_5um_percent_total": pl.datatypes.Float64,
+                    "peripheral_5um_simple_percent_total": pl.datatypes.Float64,
                     "perinuclear_percent_total": pl.datatypes.Float64
                 }
         )
