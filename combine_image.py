@@ -74,7 +74,6 @@ def _(np):
         if B is not None:
             RGB[2,:,:] = B
         return np.permute_dims(RGB,(1,2,0))
-
     return make_rgb, stretch01
 
 
@@ -140,6 +139,13 @@ def _(mo, pathlib):
 
 
 @app.cell
+def _(data, plt, stretch01, template_contour):
+    plt.imshow(stretch01(data.sel(C="488")))
+    plt.plot(template_contour[:,1], template_contour[:,0], color="white")
+    return
+
+
+@app.cell
 def _(plt, rgb_data, template_contour):
     plt.imshow(rgb_data)
     plt.plot(template_contour[:,1], template_contour[:,0], color="white")
@@ -149,13 +155,6 @@ def _(plt, rgb_data, template_contour):
 @app.cell
 def _(data, plt, stretch01, template_contour):
     plt.imshow(stretch01(data.sel(C="405")))
-    plt.plot(template_contour[:,1], template_contour[:,0], color="white")
-    return
-
-
-@app.cell
-def _(data, plt, stretch01, template_contour):
-    plt.imshow(stretch01(data.sel(C="488")))
     plt.plot(template_contour[:,1], template_contour[:,0], color="white")
     return
 
