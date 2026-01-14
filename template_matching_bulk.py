@@ -14,6 +14,41 @@ import netCDF4
 from scipy.ndimage import distance_transform_edt
 from matplotlib.backends.backend_pdf import PdfPages
 
+def get_coordinate_overrides_dict():
+    schema = {
+        "path": pl.String,
+        "x": pl.Int16,
+        "y": pl.Int16
+    }
+    coordinate_overrides_df = pl.read_csv(
+        "coordinate_overrides.csv",
+        has_header=False,
+        new_columns = ["path", "x", "y"],
+        schema=schema
+    )
+
+    coordinate_overrides_dict = {}
+    for row in coordinate_overrides_df.iter_rows():
+        coordinate_overrides_dict[row[0]] = (row[1],row[2])
+
+    return coordinate_overrides_dict
+
+coordinate_overrides_dict = get_coordinate_overrides_dict()
+
+def top_coordinate_overrides_to_template_center(path, *, offset = None):
+    # Distance in pixels from the top of the template to the center of the template
+    top_to_center = 385 # 1024 - np.argmax(template[:,1024])
+    if offset is None:
+        offset = offset_overrides.get(path, [128, 128])
+    top_x, top_y = coordinate_overrides_dict[path]
+    # return in the same order as max_match_template
+    return top_y + top_to_center - offset[0], top_x - offset[1]
+
+def get_template_center(img, path, *, template_hat = None, offset=None, roi=None):
+    if path in coordinate_overrides_dict:
+        return top_coordinates_to_template_center(path, offset=offset)
+    return max_match_template(img, template_hat = template_hat, offset=offset, roi=roi)
+
 def get_template_at_width(width):
     file = pymupdf.open("single_pattern.ai")
     png_bytes = cairosvg.svg2png(file[0].get_svg_image(), output_width=width, output_height=width)
@@ -156,7 +191,8 @@ def score_template_match(img_path, *, template_hat = None, template = None):
     sumproj_thresholded = sumproj > sumproj_threshold
  
     # Match
-    max_coords = max_match_template(img, template_hat=template_hat, offset=offset, roi=roi)
+    max_coords = get_template_center(img, img_path, template_hat=template_hat, offset=offset, roi=roi)
+    #max_coords = max_match_template(img, template_hat=template_hat, offset=offset, roi=roi)
     shifted_template = np.roll(template, (max_coords[0] - 1024, max_coords[1] - 1024), axis=(0,1))
     shifted_template_contour = skimage.measure.find_contours(shifted_template)
     score = np.sum(sumproj_thresholded & shifted_template)/(np.sum(shifted_template > 0))
