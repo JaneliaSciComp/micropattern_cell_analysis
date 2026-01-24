@@ -45,8 +45,8 @@ def top_coordinate_overrides_to_template_center(path, *, offset = None):
     return top_y + top_to_center - offset[0], top_x - offset[1]
 
 def get_template_center(img, path, *, template_hat = None, offset=None, roi=None):
-    if path in coordinate_overrides_dict:
-        return top_coordinates_to_template_center(path, offset=offset)
+    if str(path) in coordinate_overrides_dict:
+        return top_coordinate_overrides_to_template_center(str(path), offset=offset)
     return max_match_template(img, template_hat = template_hat, offset=offset, roi=roi)
 
 def get_template_at_width(width):
@@ -202,7 +202,7 @@ def score_template_match(img_path, *, template_hat = None, template = None):
     proj_path = pathlib.Path("projections",*relative_path.parts).with_suffix(".nc")
     proj_path.parent.mkdir(parents=True, exist_ok=True)
 
-    cropped_proj_img = np.sum(img[:,:,max_coords[0]-512+128:max_coords[0]+512+128, max_coords[1]-512+128:max_coords[1]+512+128], axis=0)
+    cropped_proj_img = np.sum(img[:,:,max_coords[0]-512+offset[0]:max_coords[0]+512+offset[0], max_coords[1]-512+offset[1]:max_coords[1]+512+offset[1]], axis=0)
     cropped_proj_img.to_netcdf(proj_path)
     cropped_template_contour = shifted_template_contour[0].copy()
     cropped_template_contour[:,0] -= (max_coords[0]-512)
@@ -371,6 +371,7 @@ def score_template_match(img_path, *, template_hat = None, template = None):
         plt.plot(cropped_template_contour[1083:1951,1],cropped_template_contour[1083:1951,0], color="white", alpha=0.5)
         plt.plot(cropped_template_contour[1300:1734,1],cropped_template_contour[1300:1734,0], color="cyan", alpha=0.5)
         plt.plot(cropped_nuclear_contour[:,1], cropped_nuclear_contour[:,0], color="white", alpha=0.5)
+        print(f"Debug: {peripheral_5um_percent= }, {peripheral_5um_sum= }, {mitochondria_sum= }, {perinuclear_sum= }")
         plt.title("P5um/(P5um+N): {:.1f}%, P5um/Crop: {:.1f}%, N/Crop: {:.1f}%".format(peripheral_5um_percent, peripheral_5um_sum/mitochondria_sum*100, perinuclear_sum/mitochondria_sum*100))
         draw_scale_bar(perinuclear_space_distance_pixels)
         pdf.savefig()
