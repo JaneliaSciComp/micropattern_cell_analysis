@@ -26,18 +26,18 @@ def find_well_directory(plate_name: str, well_id: str) -> Path | None:
             return subdir
     return None
 
-def list_cells(well_dir: Path, denoised: bool = False) -> list[Path]:
-    """Lists .nc files in the well directory or its denoised subdirectory."""
+def list_cells(well_dir: Path, denoised: bool = False, pattern: str = "*.nc") -> list[Path]:
+    """Lists .nc files in the well directory or its denoised subdirectory matching a pattern."""
     target_dir = well_dir / "denoised" if denoised else well_dir
     if not target_dir.exists():
         return []
-    return sorted(list(target_dir.glob("*.nc")))
+    return sorted(list(target_dir.glob(pattern)))
 
 def load_cell(file_path: Path) -> xr.Dataset:
     """Loads a cell projection NetCDF file."""
     return xr.open_dataset(file_path)
 
-def gather_datasets(selected_df, plate_col, condition, denoised):
+def gather_datasets(selected_df, plate_col, condition, denoised, pattern="*.nc"):
     all_datasets = []
     # Iterate over all rows in the selected dataframe
     for row in selected_df.iter_rows(named=True):
@@ -49,7 +49,7 @@ def gather_datasets(selected_df, plate_col, condition, denoised):
 
         well_dir = find_well_directory(plate_name, well_id)
         if well_dir:
-            cells = list_cells(well_dir, denoised=denoised)
+            cells = list_cells(well_dir, denoised=denoised, pattern=pattern)
             for cell_path in cells:
                 try:
                     loaded_ds = load_cell(cell_path)
@@ -77,21 +77,64 @@ def aggregate_datasets(all_datasets):
     return None
 
 def sum_channel(all_datasets, channel="488"):
-    ch = None
+    if not all_datasets:
+        return None
+
+    arrays = []
+    max_h, max_w = 0, 0
+
     for dataset in all_datasets:
-        da = dataset.to_dataarray().sum(axis=0)
-        if ch is None:
-            ch = da.sel(C=channel).to_numpy()
-        else:
-            ch += da.sel(C=channel).to_numpy()
+        try:
+            # Replicate the logic: sum axis 0 (likely Z or variables), then select channel
+            # If it's a Dataset with one variable, to_dataarray() adds a 'variable' dimension.
+            da = dataset.to_dataarray().sum(axis=0)
+            if "C" in da.coords and da.coords["C"].values.size == 1:
+                 # Scalar coordinate
+                 if str(da.coords["C"].values) != channel:
+                      continue
+                 arr = da.to_numpy()
+            elif "C" in da.dims:
+                 arr = da.sel(C=channel).to_numpy()
+            else:
+                 # No C dimension/coord, assume it matches if we only have one?
+                 # Actually better to be safe.
+                 continue
+
+            if np.issubdtype(arr.dtype, np.floating):
+                 arr = arr * 65535.0
+
+            arrays.append(arr)
+            
+            h, w = arr.shape
+            max_h = max(max_h, h)
+            max_w = max(max_w, w)
+        except Exception:
+            # Channel might not exist or other error
+            continue
+
+    if not arrays:
+        return None
+
+    ch = np.zeros((max_h, max_w), dtype=np.float64)
+
+    for arr in arrays:
+        h, w = arr.shape
+        # Center alignment
+        y_off = (max_h - h) // 2
+        x_off = (max_w - w) // 2
+        ch[y_off:y_off+h, x_off:x_off+w] += arr
+
     return ch
 
-def convert_to_uint16(arr):
-    _min = arr.min()
-    _max = arr.max()
-    if _max == _min:
-        return np.zeros_like(arr, dtype=np.uint16)
-    return ((arr - _min) * (np.iinfo(np.uint16).max / (_max - _min))).astype(np.uint16)
+def convert_to_uint16(arr, stretch=False):
+    if stretch:
+        _min = arr.min()
+        _max = arr.max()
+        if _max == _min:
+            return np.zeros_like(arr, dtype=np.uint16)
+        return ((arr - _min) * (np.iinfo(np.uint16).max / (_max - _min))).astype(np.uint16)
+    else:
+        return arr.astype(np.uint16)
 
 if __name__ == "__main__":
     dfs = load_comparisons()

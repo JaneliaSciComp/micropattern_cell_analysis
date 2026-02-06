@@ -241,10 +241,22 @@ def score_template_match(img_path, *, template_hat = None, template = None):
 
     # Assume the left and right edges consist of background
     cropped_background = np.concatenate((cropped_proj_mitochondria_stretched[:,:128], cropped_proj_mitochondria_stretched[:,-128:]), axis=1)
-    cropped_background_threshold = np.percentile(cropped_background, 99.99)
+    left_percentile = np.percentile(cropped_proj_mitochondria_stretched[:,:128], 99.99)
+    right_percentile = np.percentile(cropped_proj_mitochondria_stretched[:,-128:], 99.99)
+    if abs(left_percentile - right_percentile) > 0.1:
+        cropped_background_threshold = min(left_percentile, right_percentile)
+    else:
+        cropped_background_threshold = np.percentile(cropped_background, 99.99)
     cropped_proj_mitochondria_bg_subtracted = cropped_proj_mitochondria_stretched - cropped_background_threshold
     # Set negative values to 0
     cropped_proj_mitochondria_bg_subtracted = np.clip(cropped_proj_mitochondria_bg_subtracted, 0, None)
+
+    proj_mitochondria_bg_subtracted_path = pathlib.Path("projections",*relative_path.parts).with_suffix("")
+    proj_mitochondria_bg_subtracted_path = proj_mitochondria_bg_subtracted_path.with_stem(
+        f"{proj_mitochondria_bg_subtracted_path.stem}_488_bg_subtracted"
+    )
+    proj_mitochondria_bg_subtracted_path = proj_mitochondria_bg_subtracted_path.with_suffix(".nc")
+    cropped_proj_mitochondria_bg_subtracted.to_netcdf(proj_mitochondria_bg_subtracted_path)
 
     perinuclear_mask = cropped_nuc_edt < perinuclear_space_distance_pixels
     peripheral_mask = cropped_arch_edt <= cropped_nuc_edt
@@ -388,6 +400,7 @@ def score_template_match(img_path, *, template_hat = None, template = None):
             "peripheral_5um_percent": peripheral_5um_percent,
             "peripheral_5um_simple_percent": peripheral_5um_simple_percent,
             "acute_peripheral_percent": acute_peripheral_percent,
+            "cropped_background_threshold": cropped_background_threshold
     }
 
     return output
@@ -422,6 +435,7 @@ def main(root_path):
         perinuclear_sum = []
         peripheral_5um_sum = []
         peripheral_5um_simple_sum = []
+        cropped_background_threshold = []
         relative_path = dirpath.relative_to("/groups/vale/valelab/_for_Mark/patterned_data")
         csv_path = pathlib.Path("template_matching", *relative_path.parts, "template_matching.csv")
         xlsx_path = pathlib.Path("template_matching", *relative_path.parts, "template_matching.xlsx")
@@ -444,6 +458,7 @@ def main(root_path):
                     peripheral_5um_sum.append(output["peripheral_5um_sum"])
                     peripheral_5um_simple_sum.append(output["peripheral_5um_simple_sum"])
                     perinuclear_sum.append(output["perinuclear_sum"])
+                    cropped_background_threshold.append(output["cropped_background_threshold"])
                 except Exception as e:
                     scores.append(float('nan'))
                     peripheral_percent.append(float('nan'))
@@ -454,6 +469,7 @@ def main(root_path):
                     peripheral_5um_sum.append(float('nan'))
                     peripheral_5um_simple_sum.append(float('nan'))
                     perinuclear_sum.append(float('nan'))
+                    cropped_background_threshold.append(float('nan'))
                     print(f"An error occurred with {img_path}: {e}")
                     traceback.print_exc()
 
@@ -475,7 +491,8 @@ def main(root_path):
                     "perinuclear_sum": perinuclear_sum,
                     "peripheral_5um_percent_total": np.array(peripheral_5um_sum) / np.array(mitochondria_sum) * 100,
                     "peripheral_5um_simple_percent_total": np.array(peripheral_5um_simple_sum) / np.array(mitochondria_sum) * 100,
-                    "perinuclear_percent_total": np.array(perinuclear_sum) / np.array(mitochondria_sum) * 100
+                    "perinuclear_percent_total": np.array(perinuclear_sum) / np.array(mitochondria_sum) * 100,
+                    "cropped_background_threshold": cropped_background_threshold
                 },
                 {
                     "path": pl.datatypes.String,
@@ -490,7 +507,8 @@ def main(root_path):
                     "perinuclear_sum": pl.datatypes.Float64,
                     "peripheral_5um_percent_total": pl.datatypes.Float64,
                     "peripheral_5um_simple_percent_total": pl.datatypes.Float64,
-                    "perinuclear_percent_total": pl.datatypes.Float64
+                    "perinuclear_percent_total": pl.datatypes.Float64,
+                    "cropped_background_threshold": pl.datatypes.Float64
                 }
         )
         csv_path.parent.mkdir(parents=True, exist_ok=True)
